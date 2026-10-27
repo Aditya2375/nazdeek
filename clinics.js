@@ -23,12 +23,15 @@
       ');out center tags 120;';
   }
 
+  // Give up on a silent server quickly so the place-search fallback can answer instead.
+  function sig() { return (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(12000) : undefined; }
+
   function post(q) {
     var i = 0;
     function go() {
       if (i >= ENDPOINTS.length) return Promise.reject(new Error('overpass'));
       var url = ENDPOINTS[i++];
-      return fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+      return fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: sig() })
         .then(function (res) { if (!res.ok) throw new Error('http ' + res.status); return res.json(); })
         .catch(go);
     }
