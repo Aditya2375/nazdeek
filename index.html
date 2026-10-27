@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nazdeek: say what is wrong, know what to do next</title>
+<meta name="description" content="Describe symptoms by voice in your own language. Nazdeek says whether to rest at home, see a clinic, or get emergency help, and finds the nearest government clinic. It does not diagnose.">
+<meta name="theme-color" content="#f4eee0">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 32'%3E%3Crect width='44' height='32' rx='7' fill='%23f4eee0'/%3E%3Cpath d='M4 16h5l2.5-7 3 14 3-11 2.5 7 3-4h4l2-3 2.5 6 2.5-5h6' fill='none' stroke='%231c1611' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,300..700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Serif+Devanagari:wght@500;700&family=Noto+Sans+Kannada:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600;700&family=Noto+Sans+Telugu:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+<header class="top">
+  <div class="toprow">
+    <a class="brand" href="./" aria-label="Nazdeek">
+      <svg class="brandmark" viewBox="0 0 44 18" aria-hidden="true"><path d="M1 9h6l2.2-6 2.8 12 2.8-9 2.2 5.5 2-2.5h5l1.8-2.6L30 12l2.2-4.4H43" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="brandname">Nazdeek</span>
+    </a>
+    <a class="sos" id="sos" href="tel:112"></a>
+  </div>
+  <nav class="langbar" id="langbar" aria-label="Language"></nav>
+</header>
+
+<main id="app" aria-live="polite"></main>
+
+<footer class="foot">
+  <p id="privacy"></p>
+  <p id="disclaimer-foot"></p>
+  <p class="src"><a href="https://github.com/Aditya2375/nazdeek">Source code</a> &middot; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</p>
+</footer>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/leaflet-images.js"></script>
+<script src="langs.js"></script>
+<script src="result-text.js"></script>
+<script src="place-text.js"></script>
+<script src="symptoms.js"></script>
+<script src="engine.js"></script>
+<script src="clinics.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
