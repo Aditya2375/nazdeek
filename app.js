@@ -4,7 +4,7 @@
   var langbar = document.getElementById('langbar');
   var st = { li: 0, step: 1, sel: [], who: 'adult', days: 'd1', sev: 'ok', q1: false, q2: false, q3: false, heard: '' };
   var rec = null, map = null, wave = null;
-  var levelStream = null, actx = null;
+  var levelStream = null, actx = null, micVersion=0, searchVersion=0;
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var RM = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -78,7 +78,9 @@
 
   function startLevel() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !wave) return;
+    var ticket=++micVersion;
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      if(ticket!==micVersion||!rec){stream.getTracks().forEach(function(tr){tr.stop()});return}
       levelStream = stream;
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
@@ -98,6 +100,7 @@
     }).catch(function () {});
   }
   function stopLevel() {
+    micVersion++;
     if (actx) { try { actx.close(); } catch (e) {} actx = null; }
     if (levelStream) { levelStream.getTracks().forEach(function (tr) { tr.stop(); }); levelStream = null; }
     if (wave) wave.level = 0;
@@ -110,7 +113,7 @@
     sos.innerHTML = esc(t('sosShort')).replace(/(\d+)/g, '<b>$1</b>');
     sos.href = 'tel:112';
     sos.setAttribute('aria-label', t('sos'));
-    document.getElementById('privacy').textContent = t('privacy');
+    document.getElementById('privacy').textContent = 'Typed symptoms stay in this tab. Speech recognition may send audio to your browser provider. Location/place searches go to map services; map tiles reveal the viewed area. Directions open Google Maps. Nothing is saved by this app.';
     document.getElementById('disclaimer-foot').textContent = t('disclaimer');
   }
   function renderLangbar() {
@@ -174,7 +177,7 @@
             '<span class="wavelabel"><span class="wavedot" aria-hidden="true"></span><span id="miclabel">' + esc(t('micIdle')) + '</span></span></button>'
           : '<p class="micnone">' + esc(t('micNone')) + '</p>') +
       '<label class="sayhint" for="say">' + esc(t('typeHint')) + '</label>' +
-      '<input class="say" id="say" type="text" autocomplete="off" lang="' + NZ.LANGS[st.li].code + '" value="' + esc(st.heard) + '">' +
+      '<input class="say" id="say" maxlength="2000" type="text" autocomplete="off" lang="' + NZ.LANGS[st.li].code + '" value="' + esc(st.heard) + '">' +
       '<div class="script" id="script"></div>' +
       '<div class="heardrow" id="heardbox"></div>' +
       '<div id="msgbox"></div>' +
@@ -202,7 +205,7 @@
 
     var say = document.getElementById('say'), script = document.getElementById('script');
     function heard(text) {
-      st.heard = text;
+      text=String(text).slice(0,2000);st.heard = text;
       var ids = E.matchText(text);
       ids.forEach(function (id) { toggle(id, true); });
       say.classList.toggle('quiet', !!text.trim());
@@ -230,17 +233,19 @@
       mic.dataset.on = 'true'; label1.textContent = t('micOn');
       wave.on(true); startLevel();
       rec.onresult = function (ev) {
+        if(!say.isConnected)return;
         var txt = ''; for (var i = 0; i < ev.results.length; i++) txt += ev.results[i][0].transcript + ' ';
         say.value = txt.trim(); heard(say.value);
       };
       rec.onerror = function (ev) {
+        if(!document.getElementById('msgbox'))return;
         if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
           document.getElementById('msgbox').innerHTML = '<div class="msg">' + esc(t('micDenied')) + '</div>';
         }
       };
       rec.onend = function () {
         rec = null; mic.dataset.on = 'false'; label1.textContent = t('micIdle');
-        wave.on(false); stopLevel();
+        if(wave)wave.on(false); stopLevel();
       };
       try { rec.start(); } catch (e) { rec = null; mic.dataset.on = 'false'; wave.on(false); stopLevel(); }
     };
@@ -353,33 +358,23 @@
 
   function finder() {
     return '<section class="finder"><h2 class="sect">' + esc(t('nearest')) + '</h2>' +
-      '<div class="findrow"><button type="button" class="locbtn" id="useloc"><span>' + esc(t('useLoc')) + '</span><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/><circle cx="8" cy="8" r="3.2"/></svg></button>' +
-      '<form id="placeform"><input id="place" type="text" autocomplete="off" enterkeyhint="search" placeholder="' + esc(t('orPlace')) + '"><button class="findbtn" type="submit">' + esc(t('find')) + '</button></form></div>' +
+      '<p class="disc">Unverified map candidates, straight-line distance only. Government status inferred from map tags, not verified. Listings may not be open or equipped for your needs. Do not wait for this search in an emergency.</p><div class="findrow"><button type="button" class="locbtn" id="useloc"><span>' + esc(t('useLoc')) + '</span><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/><circle cx="8" cy="8" r="3.2"/></svg></button>' +
+      '<form id="placeform"><input id="place" aria-label="Village, town or PIN code" maxlength="200" type="text" autocomplete="off" enterkeyhint="search" placeholder="' + esc(t('orPlace')) + '"><button class="findbtn" type="submit">' + esc(t('find')) + '</button></form></div>' +
       '<div id="found" aria-live="polite"></div></section>';
   }
   function bindFinder(hospital) {
     var found = document.getElementById('found');
-    function busy() { found.innerHTML = '<div class="msg"><span class="spin"></span>' + esc(t('searching')) + '</div>'; }
-    function run(lat, lon) {
-      busy();
-      C.find(lat, lon, hospital).then(function (res) { showPlaces(res, lat, lon); }).catch(function () { found.innerHTML = '<div class="msg">' + esc(t('netFail')) + '</div>'; });
-    }
-    document.getElementById('useloc').onclick = function () {
-      if (!navigator.geolocation) { found.innerHTML = '<div class="msg">' + esc(t('locDenied')) + '</div>'; return; }
-      busy();
-      navigator.geolocation.getCurrentPosition(function (p) { run(p.coords.latitude, p.coords.longitude); },
-        function () { found.innerHTML = '<div class="msg">' + esc(t('locDenied')) + '</div>'; }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 });
-    };
-    document.getElementById('placeform').onsubmit = function (e) {
-      e.preventDefault();
-      var q = document.getElementById('place').value.trim(); if (!q) return;
-      busy();
-      C.geocode(q).then(function (g) { if (!g) found.innerHTML = '<div class="msg">' + esc(t('placeNone')) + '</div>'; else run(g.lat, g.lon); })
-        .catch(function () { found.innerHTML = '<div class="msg">' + esc(t('netFail')) + '</div>'; });
-    };
-    var m = /[#&]loc=([\d.]+),([\d.]+)/.exec(location.hash);
-    if (m) run(parseFloat(m[1]), parseFloat(m[2]));
+    var busyNow=false;
+    function active(ticket){return ticket===searchVersion&&found.isConnected}
+    function busy(){busyNow=true;document.getElementById('useloc').disabled=true;document.querySelector('#placeform button').disabled=true;found.innerHTML='<div class="msg"><span class="spin"></span>'+esc(t('searching'))+'</div>'}
+    function done(ticket){if(active(ticket)){busyNow=false;document.getElementById('useloc').disabled=false;document.querySelector('#placeform button').disabled=false}}
+    function fail(ticket,key){if(active(ticket))found.innerHTML='<div class="msg">'+esc(t(key))+'</div>';done(ticket)}
+    function run(lat,lon,ticket){return C.find(lat,lon,hospital).then(function(res){if(active(ticket))showPlaces(res,lat,lon)}).catch(function(){fail(ticket,'netFail')}).finally(function(){done(ticket)})}
+    document.getElementById('useloc').onclick=function(){if(busyNow)return;var ticket=++searchVersion;if(!navigator.geolocation){fail(ticket,'locDenied');return}busy();navigator.geolocation.getCurrentPosition(function(p){if(active(ticket))run(p.coords.latitude,p.coords.longitude,ticket)},function(){fail(ticket,'locDenied')},{enableHighAccuracy:false,timeout:15000,maximumAge:120000})};
+    document.getElementById('placeform').onsubmit=function(e){e.preventDefault();if(busyNow)return;var q=document.getElementById('place').value.trim();if(!q)return;var ticket=++searchVersion;busy();C.geocode(q).then(function(g){if(!active(ticket))return;if(!g)fail(ticket,'placeNone');else return run(g.lat,g.lon,ticket)}).catch(function(){fail(ticket,'netFail')})};
+    // No implicit location query from a shared fragment. The user starts each search.
   }
+
   function showPlaces(res, lat, lon) {
     var found = document.getElementById('found');
     if (!res.list.length) { found.innerHTML = '<div class="msg">' + esc(t('nothingFound')) + '</div>'; return; }
@@ -389,7 +384,7 @@
       var phone = p.phone.replace(/[^\d+]/g, '');
       html += '<li class="rung"><div class="dist"><b>' + p.km.toFixed(1) + '</b><small>' + esc(t('away')) + '</small></div>' +
         '<div class="info"><h4>' + esc(p.name) + '</h4>' +
-        '<p class="meta"><span class="gtag' + (p.gov ? '' : ' o') + '">' + esc(p.gov ? t('govTag') : t('otherTag')) + '</span>' + esc(p.place) + '</p>' +
+        '<p class="meta"><span class="gtag' + (p.gov ? '' : ' o') + '">' + esc(p.gov ? t('govTag')+' ?' : t('otherTag')) + '</span>' + esc(p.place) + '</p>' +
         (p.hours ? '<p class="hours">' + esc(p.hours) + '</p>' : '') +
         '<p class="acts"><a href="https://www.google.com/maps/dir/?api=1&destination=' + p.lat + ',' + p.lon + '" target="_blank" rel="noopener">' + esc(t('directions')) + ' &rarr;</a>' +
         (phone ? '<a href="tel:' + esc(phone) + '">' + esc(t('callPlace')) + ' ' + esc(p.phone) + '</a>' : '') + '</p></div></li>';
@@ -408,6 +403,7 @@
   }
 
   function render() {
+    searchVersion++;stopMic();if(wave){wave.stop();wave=null}if(map){map.remove();map=null}
     if (st.step === 1) stepOne(); else if (st.step === 2) stepTwo(); else stepThree();
     window.scrollTo(0, 0);
   }
@@ -415,12 +411,12 @@
   // plain deep link, handy for sharing a result or testing: #r&s=fever,cough&who=child&d=d2&sev=ok&lang=hi
   function fromHash() {
     var h = location.hash; if (h.indexOf('#r') !== 0) return false;
-    var g = function (k) { var m = new RegExp('[&]' + k + '=([^&]*)').exec(h); return m ? decodeURIComponent(m[1]) : null; };
+    var g = function (k) { var m = new RegExp('[&]' + k + '=([^&]*)').exec(h); if(!m)return null;try{return decodeURIComponent(m[1])}catch{return null} };
     var ids = (g('s') || '').split(',').filter(function (x) { return S.some(function (s) { return s[0] === x; }); });
     if (!ids.length) return false;
     var li = NZ.LANGS.map(function (l) { return l.code; }).indexOf(g('lang') || 'en');
     st.li = li < 0 ? 0 : li; st.sel = ids;
-    st.who = g('who') || 'adult'; st.days = g('d') || 'd1'; st.sev = g('sev') || 'ok';
+    st.who=['adult','child','infant','elder','preg'].includes(g('who'))?g('who'):'adult';st.days=['d1','d2','d3'].includes(g('d'))?g('d'):'d1';st.sev=['ok','bad'].includes(g('sev'))?g('sev'):'ok';
     st.q1 = g('q1') === '1'; st.q2 = g('q2') === '1'; st.q3 = g('q3') === '1';
     st.step = 3; return true;
   }
@@ -429,5 +425,5 @@
   st.li = idx < 0 ? 0 : idx;
   fromHash();
   chrome(); renderLangbar(); render();
-  if (window.speechSynthesis) speechSynthesis.onvoiceschanged = function () { if (st.step === 3) render(); };
+  window.addEventListener('pagehide',function(){stopMic();if(wave)wave.stop();if(window.speechSynthesis)speechSynthesis.cancel()});
 })();
