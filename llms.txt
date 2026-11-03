@@ -1,0 +1,2 @@
+# Nazdeek
+Unvalidated health-information prototype, not medical advice or a safe-to-stay-home decision. Clinical and native-language review are outstanding. Map candidates and inferred government status are unverified. Typed symptoms are not stored; browser speech recognition may transmit audio. Map services receive location/place searches and viewed tile areas.
