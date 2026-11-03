@@ -10,10 +10,10 @@
   }
 
   function isGov(tags) {
-    var ot = (tags['operator:type'] || '').toLowerCase();
+    var ot = text(tags['operator:type'],100).toLowerCase();
     if (ot === 'government' || ot === 'public') return true;
-    var hay = [tags.name, tags['name:en'], tags['name:hi'], tags['name:kn'], tags.operator, tags['operator:en']].filter(Boolean).join(' | ');
-    return GOV.test(hay);
+    return false; // Names alone cannot establish public ownership.
+
   }
 
   function query(lat, lon, r) {
@@ -24,15 +24,16 @@
   }
 
   // Give up on a silent server quickly so the place-search fallback can answer instead.
-  function sig() { return (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(12000) : undefined; }
+  function validCoords(lat,lon){return Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180}
+  function request(url,options){var c=new AbortController(),t=setTimeout(function(){c.abort()},12000);return fetch(url,Object.assign({},options,{signal:c.signal})).then(function(r){if(!r.ok)throw Error('HTTP '+r.status);return r.text()}).then(function(text){if(text.length>2000000)throw Error('large response');return JSON.parse(text)}).finally(function(){clearTimeout(t)})}
+  function text(v,n){return typeof v==='string'?v.slice(0,n):''}
 
   function post(q) {
     var i = 0;
     function go() {
       if (i >= ENDPOINTS.length) return Promise.reject(new Error('overpass'));
       var url = ENDPOINTS[i++];
-      return fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: sig() })
-        .then(function (res) { if (!res.ok) throw new Error('http ' + res.status); return res.json(); })
+      return request(url,{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'}})
         .catch(go);
     }
     return go();
@@ -40,9 +41,9 @@
 
   function shape(el, lat, lon) {
     var p = el.center || el;
-    if (typeof p.lat !== 'number') return null;
-    var t = el.tags || {};
-    var name = t.name || t['name:en'] || t.operator || '';
+    if (!validCoords(p.lat,p.lon)) return null;
+    var t = el.tags && typeof el.tags==='object' ? el.tags : {};
+    var name = text(t.name,250) || text(t['name:en'],250) || text(t.operator,250);
     if (!name) return null;
     return {
       id: el.type + el.id, name: name, lat: p.lat, lon: p.lon,
@@ -50,32 +51,33 @@
       gov: isGov(t),
       hospital: t.amenity === 'hospital' || t.healthcare === 'hospital',
       emergency: t.emergency === 'yes',
-      phone: (t.phone || t['contact:phone'] || '').split(';')[0].trim(),
-      hours: t.opening_hours || '',
-      place: [t['addr:street'], t['addr:suburb'] || t['addr:city'] || t['addr:village']].filter(Boolean).join(', ')
+      phone: text(t.phone || t['contact:phone'],100).split(';')[0].trim(),
+      hours: text(t.opening_hours,200),
+      place: [text(t['addr:street'],200),text(t['addr:suburb'] || t['addr:city'] || t['addr:village'],200)].filter(Boolean).join(', ')
     };
   }
 
   // Widens the circle until it finds something worth showing. Government first, then anything.
   function find(lat, lon, wantHospital) {
+    if(!validCoords(lat,lon))return Promise.reject(Error('coordinates'));
     function step(i) {
       if (i >= STEPS.length) return Promise.resolve({ list: [], anyGov: false });
       return post(query(lat, lon, STEPS[i])).then(function (data) {
         var seen = {}, all = [];
-        (data.elements || []).forEach(function (el) {
+        (Array.isArray(data.elements)?data.elements.slice(0,300):[]).forEach(function (el) {
           var s = shape(el, lat, lon);
           if (!s) return;
           var key = s.name.toLowerCase() + Math.round(s.lat * 500) + Math.round(s.lon * 500);
           if (seen[key]) return; seen[key] = 1; all.push(s);
         });
-        var gov = all.filter(function (x) { return x.gov; });
+        var gov = all.filter(function (x) { return x.gov && (!wantHospital || x.hospital); });
                 if (gov.length >= 3 || (gov.length && i === STEPS.length - 1)) {
           gov.sort(function (a, b) { return a.km - b.km; });
           return { list: gov.slice(0, 5), anyGov: true };
         }
         if (i === STEPS.length - 1) {
           var pool = wantHospital ? all.filter(function (x) { return x.hospital; }) : all;
-          if (!pool.length) pool = all;
+          if (!pool.length && !wantHospital) pool = all;
           pool.sort(function (a, b) { return a.km - b.km; });
           var g = gov.length ? gov.concat(pool.filter(function (x) { return !x.gov; })) : pool;
           g.sort(function (a, b) { return a.km - b.km; });
@@ -91,29 +93,29 @@
   function fallback(lat, lon, wantHospital) {
     var d = 0.35, vb = [lon - d, lat + d, lon + d, lat - d].join(',');
     var qs = wantHospital ? ['government hospital', 'hospital'] : ['government hospital', 'primary health centre', 'clinic'];
-    return Promise.all(qs.map(function (q) {
-      return fetch('https://nominatim.openstreetmap.org/search?format=json&limit=15&bounded=1&viewbox=' + vb + '&q=' + encodeURIComponent(q))
-        .then(function (r) { if (!r.ok) throw new Error('geo'); return r.json(); });
-    })).then(function (parts) {
+    if(!validCoords(lat,lon))return Promise.reject(Error('coordinates'));
+    // One explicit query, not concurrent bursts against a public geocoder.
+    return request('https://nominatim.openstreetmap.org/search?format=json&limit=15&bounded=1&viewbox='+vb+'&q='+encodeURIComponent(qs[0])).then(function(arr){return [Array.isArray(arr)?arr.slice(0,15):[]]}).then(function(parts){
       var seen = {}, all = [];
       parts.forEach(function (arr) {
         arr.forEach(function (x) {
           if (seen[x.place_id] || x.class !== 'amenity' && x.class !== 'healthcare') return; seen[x.place_id] = 1;
           var la = parseFloat(x.lat), lo = parseFloat(x.lon);
-          all.push({ id: 'n' + x.place_id, name: x.name || x.display_name.split(',')[0], lat: la, lon: lo, km: km(lat, lon, la, lo),
+          if(!validCoords(la,lo)||(wantHospital&&x.type!=='hospital'))return;
+          all.push({ id: 'n' + x.place_id, name: text(x.name,250) || text(x.display_name,400).split(',')[0], lat: la, lon: lo, km: km(lat, lon, la, lo),
             gov: isGov({ name: (x.name || '') + ' ' + x.display_name }), hospital: x.type === 'hospital', emergency: false, phone: '', hours: '', place: '' });
         });
       });
       all.sort(function (a, b) { return a.km - b.km; });
-      var gov = all.filter(function (x) { return x.gov; });
+      var gov = all.filter(function (x) { return x.gov && (!wantHospital || x.hospital); });
       return { list: (gov.length ? gov : all).slice(0, 5), anyGov: gov.length > 0 };
     });
   }
 
   function geocode(text) {
+    if(typeof text!=='string'||!text.trim()||text.length>200)return Promise.reject(Error('place'));
     var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=in&q=' + encodeURIComponent(text);
-    return fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw new Error('geo'); return r.json(); })
-      .then(function (a) { return a && a[0] ? { lat: parseFloat(a[0].lat), lon: parseFloat(a[0].lon), label: a[0].display_name } : null; });
+    return request(url,{headers:{Accept:'application/json'}}).then(function(a){if(!Array.isArray(a)||!a[0])return null;var lat=Number(a[0].lat),lon=Number(a[0].lon);return validCoords(lat,lon)?{lat:lat,lon:lon,label:String(a[0].display_name||'').slice(0,400)}:null});
   }
 
   root.NZ.clinics = { find: function (a, b, w) { return find(a, b, w).catch(function () { return fallback(a, b, w); }); }, fallback: fallback, geocode: geocode, isGov: isGov, km: km };
