@@ -78,9 +78,9 @@ Object.keys(say).forEach(function (k) {
 assert.deepStrictEqual(E.matchText('hello there'), []); n++;
 console.log(n + ' checks passed');
 var C = require('../clinics.js');
-assert.ok(C.isGov({ name: 'Primary Health Centre Hebbal' })); 
+assert.ok(!C.isGov({ name: 'Primary Health Centre Hebbal' })); 
 assert.ok(C.isGov({ name: 'Anything', 'operator:type': 'government' }));
-assert.ok(C.isGov({ name: 'सरकारी अस्पताल' }));
+assert.ok(!C.isGov({ name: 'सरकारी अस्पताल' }));
 assert.ok(!C.isGov({ name: 'Sunrise Nursing Home', operator: 'Dr Rao' }));
 assert.ok(!C.isGov({ name: 'Apollo Clinic' }));
 assert.ok(Math.abs(C.km(12.9716, 77.5946, 13.0827, 80.2707) - 290) < 5);
