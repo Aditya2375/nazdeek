@@ -1,6 +1,6 @@
 # Nazdeek
 
-Say what is wrong, in your own language, and find out what to do next: rest at home, see a clinic, or get emergency help. It then shows the nearest government clinics and hospitals on a map.
+Unvalidated health-information prototype. The existing rules and translations require clinical and native-speaker review before real use. A reassuring result cannot establish that it is safe to stay home. The map is an unverified volunteer-data directory, not a guarantee of nearby care, ownership, opening hours or capability.
 
 Live: https://aditya2375.github.io/nazdeek/
 
@@ -11,12 +11,12 @@ Nazdeek does not diagnose and is not medical advice. It only suggests how urgent
 - Voice or text input in English, Hindi, Kannada, Marathi, Tamil and Telugu. Voice uses the browser's speech recognition (works best in Chrome on Android). If voice is not available, tap symptoms instead.
 - Plain rules, no black box. Danger signs (chest pain, trouble breathing, fits, heavy bleeding, snake bite, stroke signs and so on) always give an emergency answer. Everything else moves up, never down, with age, pregnancy, how long it has lasted and how weak the person is. The rules are in `engine.js` and every one is covered in `tests/engine.test.js`.
 - Thoughts of self-harm get Tele-MANAS (14416) and 112, not a clinic list.
-- Nearest government clinics and hospitals from OpenStreetMap, using your location or a village, town or PIN code you type. Shows distance, directions and a phone number when the map has one.
+- Unverified clinic and hospital candidates from OpenStreetMap, using your location or a village, town or PIN code you type. Shows distance, directions and a phone number when the map has one.
 - Reads the answer aloud when the phone has a voice for that language.
 
 ## Privacy
 
-Nothing you say or pick is stored or sent to us. There is no server and no analytics. Your location goes only to the map services (Overpass and Nominatim) to look up nearby places.
+Typed symptoms are evaluated in this tab and not stored by this app. Browser speech recognition may send audio to its provider. Overpass/Nominatim receive coordinates and place searches; OpenStreetMap tile requests reveal the viewed area and IP address. Directions open Google Maps. No analytics or app backend. Fonts are self-hosted with licenses in assets/font-licenses.txt. Privacy notice is English pending native-language review.
 
 ## Run it
 
@@ -35,3 +35,9 @@ Tests:
 - The triage rules are a simple first filter. They have not been clinically validated.
 
 Built for Code for a Billion (Health track).
+
+## Technical audit scope
+
+Medical rule outputs were not expanded or presented as clinically validated. Existing 1123 engine checks verify implementation consistency, not clinical safety. The technical pass adds bounded response parsing (2MB), 12s request timeouts, finite map coordinates, capped map rows, serialized user-started search and stale-result guards. A shared URL no longer silently initiates a location search. Government status uses explicit operator:type tags only, never a facility name heuristic; even these volunteer tags remain unverified. Emergency searches filter hospital candidates, without claiming any can handle emergencies. Search can fail or miss closer places. No health-service call or microphone recording was made during automated QA.
+
+Clinical and native-language validation remain BLOCKED pending qualified review. Support: adityakulkarnicoding@gmail.com
